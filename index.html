@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recorrido 3D El Paso Alexandria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Visor a pantalla completa: el modelo es protagonista, la interfaz flota en paneles chocolate con acento miel */
+  --ink:#16100c;
+  --panel:rgba(28,19,14,.88);
+  --line:rgba(239,230,214,.14);
+  --cream:#efe6d6;
+  --muted:#b8a890;
+  --honey:#dc9d3f;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--cream);font-family:var(--body);overflow:hidden}
+#scene{position:fixed;inset:0;touch-action:none}
+#scene canvas{display:block}
+.top{position:fixed;top:12px;right:12px;pointer-events:none}
+.help-btn{pointer-events:auto;width:38px;height:38px;padding:0;border-radius:50%;font-size:18px;background:var(--panel)}
+button{font:600 15px/1 var(--body);color:var(--cream);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:9px;padding:10px 14px;cursor:pointer;white-space:nowrap}
+button:hover{border-color:var(--honey)}
+button:focus-visible{outline:2px solid var(--honey);outline-offset:2px}
+button.on{background:var(--honey);color:var(--ink);border-color:var(--honey)}
+.views{position:fixed;left:12px;top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:6px;max-width:calc(100% - 70px);backdrop-filter:blur(6px)}
+.vtoggle{font-family:var(--display);font-size:14px;letter-spacing:.12em;text-transform:uppercase;padding:7px 10px;text-align:left;background:none;border-color:transparent}
+.views.closed .grid,.views.closed .walk{display:none}
+.views .grid button,.views .walk{font-size:13px;padding:7px 10px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.walk{width:100%}
+.help{position:fixed;right:12px;top:58px;width:270px;max-width:calc(100% - 24px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.45;backdrop-filter:blur(6px)}
+.help h3{margin:0 0 6px;font-family:var(--display);font-size:18px;letter-spacing:.04em}
+.help dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px}
+.help dt{color:var(--honey);font-weight:600}
+.help dd{margin:0;color:var(--cream)}
+.help .mode{margin:10px 0 0;color:var(--muted)}
+.hidden{display:none!important}
+.pad{position:fixed;left:14px;bottom:18px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,46px);gap:5px;opacity:.85}
+.pad button{padding:0;font-size:17px;background:var(--panel)}
+.pad .up{grid-column:2}
+.lbl{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:var(--honey);padding:3px 8px;border-radius:6px;white-space:nowrap;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.lbl.gris{background:rgba(239,230,214,.92)}
+#loader{position:fixed;inset:0;display:grid;place-items:center;background:var(--ink);z-index:10}
+#loader div{width:260px;text-align:center}
+#loader b{display:block;font-family:var(--display);font-size:22px;margin-bottom:10px}
+.bar{height:6px;background:rgba(255,255,255,.1);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--honey);transition:width .2s}
+#loader span{display:block;margin-top:8px;color:var(--muted);font-size:14px}
+@media (max-width:640px){
+  .views{left:8px;top:8px}
+  .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .views .grid button,.views .walk{padding:8px 6px;font-size:12px}
+  .top{top:8px;right:8px}
+  .help{top:52px;right:8px}
+  .pad{left:10px;bottom:14px}
+}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="loader"><div><b>Cargando el restaurante…</b><div class="bar"><i id="prog"></i></div><span id="progtxt">0 %</span></div></div>
+
+<header class="top">
+  <button class="help-btn" id="helpBtn" aria-expanded="false" aria-controls="help" aria-label="Ayuda">?</button>
+</header>
+
+<aside class="help hidden" id="help">
+  <h3>Cómo moverte</h3>
+  <dl id="helpOrbit">
+    <dt>Girar</dt><dd>Arrastra con clic izquierdo o un dedo</dd>
+    <dt>Desplazar</dt><dd>Clic derecho o dos dedos</dd>
+    <dt>Acercar</dt><dd>Rueda del mouse o pellizca</dd>
+  </dl>
+  <dl id="helpWalk" class="hidden">
+    <dt>Caminar</dt><dd>W A S D o flechas; en celular, los botones</dd>
+    <dt>Mirar</dt><dd>Arrastra con el mouse o el dedo</dd>
+    <dt>Correr</dt><dd>Mantén Shift</dd>
+    <dt>Salir</dt><dd>Esc o el botón Dejar de caminar</dd>
+  </dl>
+  <p class="mode">Usa el menú Vistas para saltar a cada zona.</p>
+</aside>
+
+<nav class="views" id="views" aria-label="Vistas">
+  <button class="vtoggle" id="vToggle" aria-expanded="true">Vistas ▾</button>
+  <div class="grid" id="viewBtns">
+    <button data-v="general">General</button>
+    <button data-v="planta">Planta</button>
+    <button data-v="zona1">Zona 1</button>
+    <button data-v="zona2">Zona 2</button>
+    <button data-v="zona3">Zona 3</button>
+    <button data-v="zona4">Zona 4</button>
+    <button data-v="barra">Barra</button>
+    <button data-v="recepcion">Recepción</button>
+  </div>
+  <button class="walk" id="walkBtn">Caminar por el restaurante</button>
+</nav>
+
+<div class="pad hidden" id="pad" aria-label="Controles para caminar">
+  <button class="up" data-k="f" aria-label="Avanzar">▲</button>
+  <button data-k="l" aria-label="Izquierda">◀</button>
+  <button data-k="b" aria-label="Retroceder">▼</button>
+  <button data-k="r" aria-label="Derecha">▶</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const B = (x,y,z) => new THREE.Vector3(x, z, -y); // coordenadas de Blender -> visor
+const host = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+const labels = new CSS2DRenderer();
+labels.setSize(innerWidth, innerHeight);
+Object.assign(labels.domElement.style,{position:'fixed',inset:'0',pointerEvents:'none'});
+document.body.appendChild(labels.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xc9c3b8);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xfff4e2, 0x6b5a48, 0.9));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
+const C = B(19,-21,0);
+sun.position.copy(C).add(new THREE.Vector3(-18, 40, 22));
+sun.target.position.copy(C);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30,near:1,far:120});
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
+scene.add(sun, sun.target);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.05, 500);
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true; orbit.maxPolarAngle = Math.PI*0.495; orbit.minDistance = 0.5; orbit.maxDistance = 140;
+
+const V = {
+  general:  {p:B(19,-60,33),     t:B(19,-21,0)},
+  planta:   {p:B(19,-21.2,52),   t:B(19,-21,0)},
+  zona1:    {p:B(14.8,-8.6,2.6), t:B(9.5,-4.3,0.8)},
+  zona2:    {p:B(23.6,-14.8,2.6),t:B(19.6,-3.5,0.8)},
+  zona3:    {p:B(19.5,-29.2,2.4),t:B(27.8,-34.6,0.8)},
+  zona4:    {p:B(13.0,-31.0,2.0),t:B(8.3,-35.5,0.8)},
+  barra:    {p:B(12.2,-39.5,3.0),t:B(17.8,-31.5,0.8)},
+  recepcion:{p:B(12.8,-26.4,2.6),t:B(7.0,-21.3,0.8)},
+};
+camera.position.copy(V.general.p); orbit.target.copy(V.general.t); orbit.update();
+
+// etiquetas de zonas (solo visibles desde arriba)
+const tags = [];
+[['Zona 1',10.4,-4.2,1.6],['Zona 2',20.3,-8,1.6],['Zona 3',25.7,-32,1.6],['Zona 4',8.6,-33,1.6],['Barra',17.8,-31.5,1.6],
+ ['Recepción',12.0,-13.0,1.6,1],['Cocina',27.7,-19.3,3.2,1],['Patio',4.3,-33,0.6,1],['Terraza',2.5,-13,0.6,1]].forEach(([t,x,y,z,g])=>{
+  const d=document.createElement('div'); d.className='lbl'+(g?' gris':''); d.textContent=t;
+  const o=new CSS2DObject(d); o.position.copy(B(x,y,z)); scene.add(o); tags.push(o);
+});
+
+// carga del modelo
+const prog=document.getElementById('prog'), progtxt=document.getElementById('progtxt');
+const draco=new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+const gl=new GLTFLoader(); gl.setDRACOLoader(draco);
+gl.load('restaurante.glb', g=>{
+  g.scene.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
+  scene.add(g.scene);
+  document.getElementById('loader').classList.add('hidden');
+}, e=>{ if(e.total){ const p=Math.round(e.loaded/e.total*100); prog.style.width=p+'%'; progtxt.textContent=p+' %'; } },
+ err=>{ progtxt.textContent='No se pudo cargar el modelo. Recarga la página.'; console.error(err); });
+
+// transiciones entre vistas
+let anim=null;
+function goTo(key){
+  if(walking) setWalk(false);
+  const v=V[key]; if(!v) return;
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  anim={p0:camera.position.clone(),t0:orbit.target.clone(),p1:v.p.clone(),t1:v.t.clone(),s:performance.now(),d:reduce?1:1300};
+  document.querySelectorAll('#viewBtns button').forEach(b=>b.classList.toggle('on',b.dataset.v===key));
+}
+document.querySelectorAll('#viewBtns button').forEach(b=>b.addEventListener('click',()=>goTo(b.dataset.v)));
+document.querySelector('[data-v="general"]').classList.add('on');
+
+// modo caminar
+let walking=false, yaw=0, pitch=0;
+const keys={}, padKeys={};
+const walkBtn=document.getElementById('walkBtn'), pad=document.getElementById('pad');
+const touch=matchMedia('(pointer: coarse)').matches;
+function setWalk(on){
+  walking=on; orbit.enabled=!on; anim=null;
+  walkBtn.textContent=on?'Dejar de caminar':'Caminar por el restaurante';
+  walkBtn.classList.toggle('on',on);
+  document.getElementById('helpOrbit').classList.toggle('hidden',on);
+  document.getElementById('helpWalk').classList.toggle('hidden',!on);
+  pad.classList.toggle('hidden',!(on&&touch));
+  if(on){
+    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+    yaw=Math.atan2(-dir.x,-dir.z); pitch=0;
+    if(camera.position.y>3){ // si viene desde arriba, bajar al pasillo central
+      camera.position.copy(B(15.5,-24,1.6)); yaw=0;
+    }
+    camera.position.y=1.6;
+    document.querySelectorAll('#viewBtns button').forEach(b=>b.classList.remove('on'));
+  } else {
+    const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+    orbit.target.copy(camera.position).addScaledVector(dir,3); orbit.update();
+  }
+}
+walkBtn.addEventListener('click',()=>setWalk(!walking));
+addEventListener('keydown',e=>{ keys[e.code]=true; if(e.code==='Escape'&&walking) setWalk(false); });
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+pad.querySelectorAll('button').forEach(b=>{
+  const k=b.dataset.k;
+  b.addEventListener('pointerdown',e=>{e.preventDefault();padKeys[k]=true;});
+  ['pointerup','pointerleave','pointercancel'].forEach(t=>b.addEventListener(t,()=>{padKeys[k]=false;}));
+});
+let drag=null;
+renderer.domElement.addEventListener('pointerdown',e=>{ if(walking){ drag={x:e.clientX,y:e.clientY}; renderer.domElement.setPointerCapture(e.pointerId);} });
+renderer.domElement.addEventListener('pointermove',e=>{
+  if(!walking||!drag) return;
+  yaw-=(e.clientX-drag.x)*0.004; pitch-=(e.clientY-drag.y)*0.004;
+  pitch=Math.max(-1.2,Math.min(1.2,pitch)); drag={x:e.clientX,y:e.clientY};
+});
+renderer.domElement.addEventListener('pointerup',()=>{ drag=null; });
+
+// ayuda
+const help=document.getElementById('help'), helpBtn=document.getElementById('helpBtn');
+helpBtn.addEventListener('click',()=>{ const h=help.classList.toggle('hidden'); helpBtn.setAttribute('aria-expanded',String(!h)); });
+const views=document.getElementById('views'), vToggle=document.getElementById('vToggle');
+function setViews(open){ views.classList.toggle('closed',!open); vToggle.setAttribute('aria-expanded',String(open)); vToggle.textContent=open?'Vistas ▴':'Vistas ▾'; }
+vToggle.addEventListener('click',()=>setViews(views.classList.contains('closed')));
+setViews(innerWidth>=640);
+if(innerWidth<640) document.querySelectorAll('#viewBtns button,#walkBtn').forEach(b=>b.addEventListener('click',()=>setViews(false)));
+
+// bucle
+const clock=new THREE.Clock(); const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function tick(){
+  const dt=Math.min(clock.getDelta(),0.05);
+  if(anim){
+    const k=Math.min((performance.now()-anim.s)/anim.d,1), e=ease(k);
+    camera.position.lerpVectors(anim.p0,anim.p1,e); orbit.target.lerpVectors(anim.t0,anim.t1,e);
+    if(k>=1) anim=null;
+  }
+  if(walking){
+    camera.quaternion.setFromEuler(new THREE.Euler(pitch,yaw,0,'YXZ'));
+    const sp=(keys.ShiftLeft||keys.ShiftRight?6:2.6)*dt;
+    const f=(keys.KeyW||keys.ArrowUp||padKeys.f?1:0)-(keys.KeyS||keys.ArrowDown||padKeys.b?1:0);
+    const s=(keys.KeyD||keys.ArrowRight||padKeys.r?1:0)-(keys.KeyA||keys.ArrowLeft||padKeys.l?1:0);
+    camera.position.x+=(-Math.sin(yaw)*f+Math.cos(yaw)*s)*sp;
+    camera.position.z+=(-Math.cos(yaw)*f-Math.sin(yaw)*s)*sp;
+    camera.position.x=Math.max(0,Math.min(34,camera.position.x));
+    camera.position.z=Math.max(0,Math.min(41.5,camera.position.z));
+    camera.position.y=1.6;
+  } else orbit.update();
+  const high=camera.position.y>7;
+  tags.forEach(t=>t.visible=high);
+  renderer.render(scene,camera); labels.render(scene,camera);
+  requestAnimationFrame(tick);
+}
+tick();
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); labels.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
